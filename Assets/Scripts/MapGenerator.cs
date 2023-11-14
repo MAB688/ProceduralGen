@@ -6,7 +6,7 @@ using UnityEditor.AssetImporters;
 using UnityEngine;
 
 public class MapGenerator : MonoBehaviour {
-    public enum DrawMode {NoiseMap, ColorMap, MeshMap};
+    public enum DrawMode {NoiseMap, ColorMap, MeshMap, FalloffMap};
     public DrawMode drawMode;
 
     public Noise.NormalizeMode normalizedMode;
@@ -27,6 +27,8 @@ public class MapGenerator : MonoBehaviour {
     public int seed;
     public Vector2 offset;
 
+    public bool useFalloff;
+
     public float meshHeightMultiplier;
     public AnimationCurve meshHeightCurve;
 
@@ -34,8 +36,14 @@ public class MapGenerator : MonoBehaviour {
 
     public TerrainType[] regions;
 
+    float[,] falloffMap;
+
     Queue<MapThreadInfo<MapData>> mapDataThreadInfoQueue = new Queue<MapThreadInfo<MapData>>();
     Queue<MapThreadInfo<MeshGenerator.MeshData>> meshDataThreadInfoQueue = new Queue<MapThreadInfo<MeshGenerator.MeshData>>();
+
+    void Awake() {
+        falloffMap = FalloffGenerator.GenerateFalloffMap(mapChunkSize);
+    }
 
     public void DrawMapInEditor() {
         MapData mapData = GenerateMapData(Vector2.zero);
@@ -50,6 +58,8 @@ public class MapGenerator : MonoBehaviour {
         else if (drawMode == DrawMode.MeshMap) 
             display.DrawMesh(MeshGenerator.GenerateTerrainMesh(mapData.heightMap, meshHeightMultiplier, meshHeightCurve, editorLOD), 
             TextureGenerator.TextureFromColorMap(mapData.colorMap, mapChunkSize, mapChunkSize));
+        else if (drawMode == DrawMode.FalloffMap)
+            display.DrawTexture(TextureGenerator.TextureFromHeightMap(FalloffGenerator.GenerateFalloffMap(mapChunkSize)));
     }
 
     public void RequestMapData(Vector2 center, Action<MapData> callback) {
@@ -107,6 +117,9 @@ public class MapGenerator : MonoBehaviour {
         // For every position in the noise map
         for (int y = 0; y < mapChunkSize; y++) {
             for (int x = 0; x < mapChunkSize; x++) {
+                if (useFalloff){
+                    noiseMap[x,y] = Mathf.Clamp01(noiseMap[x,y] - falloffMap[x,y]);
+                }
                 // Get the current height
                 float currentHeight = noiseMap[x,y];
                 // Find the color for that height range
@@ -114,11 +127,22 @@ public class MapGenerator : MonoBehaviour {
                     if (currentHeight >= regions[i].height)
                         // Assign that color into a 1D array
                         colorMap[y * mapChunkSize + x] = regions[i].color;
+                    // Break once we've reached a value less than the regions height
                     else
                         break;
                 }
             }
         }
+
+        if (useFalloff) {
+            // Correct outside edges for falloff mode
+            // (I think the mesh borders were normalizing with the extra border values)
+            for (int i = 0; i <= 240; i++) {
+                noiseMap[i, 240] = 0;
+                noiseMap[240, i] = 0;
+            }
+        }
+
         return new MapData(noiseMap, colorMap);
     }
 
@@ -134,6 +158,8 @@ public class MapGenerator : MonoBehaviour {
         // Cannot divide by 0
         if (noiseScale <= 0)
             noiseScale = 0.0001f;
+
+        falloffMap = FalloffGenerator.GenerateFalloffMap(mapChunkSize);
     }
 
     // Generic so it can handle both map data and meshes

@@ -13,7 +13,8 @@ public class MapGenerator : MonoBehaviour {
     
     // size - 1 so that the color and mesh maps match and work with calculations
     // Noise map will render full 241 chunk size
-    public const int mapChunkSize = 240;
+    // *POTENTIAL BUG* need to check mapChunkSize, maybe try 239
+    public const int mapChunkSize = 239;
     [Range(0,6)]
     public int editorLOD;
     public float noiseScale;
@@ -51,7 +52,7 @@ public class MapGenerator : MonoBehaviour {
         // Display the height map as a monochrome 2D texture
         if (drawMode == DrawMode.NoiseMap)
             display.DrawTexture(TextureGenerator.TextureFromHeightMap(mapData.heightMap));
-        // Display the height map as a 2D texture with color
+        // Display the height map as a 2D texture with color *BUG HERE*
         else if (drawMode == DrawMode.ColorMap)
             display.DrawTexture(TextureGenerator.TextureFromColorMap(mapData.colorMap, mapChunkSize, mapChunkSize));
         // Display the height map with meshes and textures
@@ -110,7 +111,8 @@ public class MapGenerator : MonoBehaviour {
 
     MapData GenerateMapData(Vector2 center) {
         // Generate noise map
-        float[,] noiseMap = Noise.GenerateNoiseMap(mapChunkSize, mapChunkSize, seed, noiseScale, octaves, persistance, lacunarity, center + offset, normalizedMode);
+        // *POTENTIAL BUG* Check on mapChunkSize
+        float[,] noiseMap = Noise.GenerateNoiseMap(mapChunkSize + 2, mapChunkSize + 2, seed, noiseScale, octaves, persistance, lacunarity, center + offset, normalizedMode);
 
         // Assign terrain colors to the height/noise map
         Color[] colorMap = new Color[mapChunkSize * mapChunkSize];

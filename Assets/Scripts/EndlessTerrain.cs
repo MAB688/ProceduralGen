@@ -2,6 +2,10 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.UIElements;
 
+
+// Rewrite using unity job system?
+
+
 public class EndlessTerrain : MonoBehaviour {
 
     const float scale = 5f;

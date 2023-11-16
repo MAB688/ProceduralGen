@@ -2,7 +2,7 @@ using UnityEngine;
 
 // Perlin values are always between 0.0 and 1.0
 
-public static class Noise
+public static class NoiseMap
 {
     public static float[,] GenerateNoiseMap(int mapSize, int userSeed, float userNoiseScale, int numOctaves, float userPersistance, float userLacunarity, Vector2 userOffset) {
         // Since we will be generating square chunks, width and height (mapSize) are equal

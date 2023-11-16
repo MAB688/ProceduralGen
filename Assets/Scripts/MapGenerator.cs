@@ -7,22 +7,25 @@ using UnityEngine;
 
 public class MapGenerator : MonoBehaviour {
     public enum DrawMode {NoiseMap, ColorMap, MeshMap, FalloffMap};
+    public enum ChunkSizeOption {Size128 = 128, Size256 = 256, Size512 = 512};
     public DrawMode drawMode;
-
-    public Noise.NormalizeMode normalizedMode;
     
     // size - 1 so that the color and mesh maps match and work with calculations
     // Noise map will render full 241 chunk size
     // *POTENTIAL BUG* need to check mapChunkSize, maybe try 239
-    public const int mapChunkSize = 239;
+    public ChunkSizeOption mapChunkSizeOption  = ChunkSizeOption.Size256;
+    private int mapChunkSize;
+    
     [Range(0,6)]
     public int editorLOD;
     public float noiseScale;
 
+    [Range(0,20)]
     public int octaves;
     // Must be in range from 0 to 1
     [Range(0,1)]
     public float persistance;
+    [Range(0,27)]
     public float lacunarity;
 
     public int seed;
@@ -112,7 +115,7 @@ public class MapGenerator : MonoBehaviour {
     MapData GenerateMapData(Vector2 center) {
         // Generate noise map
         // *POTENTIAL BUG* Check on mapChunkSize
-        float[,] noiseMap = Noise.GenerateNoiseMap(mapChunkSize + 2, mapChunkSize + 2, seed, noiseScale, octaves, persistance, lacunarity, center + offset, normalizedMode);
+        float[,] noiseMap = Noise.GenerateNoiseMap(mapChunkSize + 2, seed, noiseScale, octaves, persistance, lacunarity, center + offset);
 
         // Assign terrain colors to the height/noise map
         Color[] colorMap = new Color[mapChunkSize * mapChunkSize];
@@ -151,6 +154,8 @@ public class MapGenerator : MonoBehaviour {
     // This function is called automatically whenever one of the scripts variables is changed in the inspector
     void OnValidate()
     {  
+        mapChunkSize = (int)mapChunkSizeOption;
+
         if (lacunarity < 1)
             lacunarity = 1;
 

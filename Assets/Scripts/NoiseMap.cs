@@ -61,7 +61,6 @@ public static class NoiseMap
             amplitude *= userPersistance;
         }
         
-
         // Calculate the center of each axis 
         // These values represent the x and y coordinates of the center of the noise map
         float mapCenterX = mapSize / 2f;
@@ -97,8 +96,8 @@ public static class NoiseMap
                     float centeredY = y - mapCenterY;
 
                     // Add the offsets to the centered coordinates
-                    float adjustedX = centeredX + offsetX;
-                    float adjustedY = centeredY + offsetY;
+                    float adjustedX = centeredX - offsetX;
+                    float adjustedY = centeredY - offsetY;
 
                     // Calculate the sample coordinates we will use to generate Perlin values:
                     // Divide the adjusted coordinates by the userNoiseScale (zoom)

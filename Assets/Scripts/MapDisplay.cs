@@ -1,17 +1,21 @@
-using System.Collections;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 public class MapDisplay : MonoBehaviour {
-    public Renderer textureRender;
+    public Renderer heightMapRender;
+    public Renderer colorMapRender;
     public MeshFilter meshFilter;
     public MeshRenderer meshRenderer;
 
-    public void DrawTexture(Texture2D texture) {
-        // Allow texture to be viewed while the scene is not running
-        textureRender.sharedMaterial.mainTexture = texture;
-        // Scale the plane to correctly fit the entire texture
-        textureRender.transform.localScale = new Vector3(texture.width, 1, texture.height);
+    public void DrawTexture(Texture2D texture, bool isHeightMap) {
+        if (isHeightMap) {
+            // Allow texture to be viewed while the scene is not running
+            heightMapRender.sharedMaterial.mainTexture = texture;
+            // Scale the plane to correctly fit the entire texture
+            heightMapRender.transform.localScale = new Vector3(texture.width, 1, texture.height);
+        } else {
+            colorMapRender.sharedMaterial.mainTexture = texture;
+            colorMapRender.transform.localScale = new Vector3(texture.width, 1, texture.height);
+        }
     }
 
     public void DrawMesh(MeshGenerator.MeshData meshData, Texture2D texture) {

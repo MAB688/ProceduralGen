@@ -1,79 +1,144 @@
-using System.Numerics;
 using UnityEngine;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 
+// Size of height map will come in as +2 to account for the border overlap needed to smooth the seams between chunks
+// A mesh is a collection of vertices, edges, and faces that define the shape of a 3D object
+// A vertex is a point in 3D space, they are connected by edges to form faces
+// A tringale is the simplest face, it is defined by 3 vertices
+// A UV is a texture coordinate that determine how a 2D texture will be mapped onto a 3D mesh
+// UVs are assigned per vertex
 public static class MeshGenerator {
-    
-    public static MeshData GenerateTerrainMesh(float[,] noiseMap, float heightMultiplier, AnimationCurve _heightCurve, int levelOfDetail) {
+    public static MeshData GenerateTerrainMesh(float[,] heightMap, float heightMultiplier, AnimationCurve _heightCurve, int lod) {
+        // Allows us to set a height curve in the inspector
         AnimationCurve heightCurve = new AnimationCurve(_heightCurve.keys);
 
-        // If level of detail == 0, set the increment to 1 otherwise set it to an increment of 2
-        int meshSimplificationIncrement = (levelOfDetail == 0) ? 1 : levelOfDetail * 2;
+        // The total size, including the border part and mesh part
+        // 258 = 256 + 2
+        int totalSize = heightMap.GetLength(0);
 
-        int borderedSize = noiseMap.GetLength(0);
-        // Since we are just creating square meshes, we only need one length/width variable
-        int meshSize = borderedSize - (2 * meshSimplificationIncrement);
+        // The size of the mesh without any lod reductions or border (this part will be rendered)
         // Used for variables we want to remain constant (do not want to change with LOD)
-        int meshSizeUnsimplified = borderedSize - 2;
+        // 256 = 258 - 2
+        int meshSize = totalSize - 2;
 
-        // Used to center the mesh data (subtract 1 because we count from 0)
-        float halfWidth = (meshSizeUnsimplified - 1) / 2f;
-        float halfHeight = (meshSizeUnsimplified - 1) / 2f;
+        // If level of detail == 0, set lod to 1 otherwise set it to an increment of 2
+        int lodIncrement = (lod == 0) ? 1 : lod * 2;
+
+        // The size of the mesh with lod reductions, but no border (this part will be rendered)
+        // The higher the lodReduction, the less detailed the mesh is
+        int lodMeshSize = totalSize - (2 * lodIncrement);
         
-        int verticesPerLine = (meshSize - 1) / meshSimplificationIncrement + 1;
+        // The LOD setting determines how many vertices there are per line
+        int verticesPerLine = (lodMeshSize - 1) / (lodIncrement + 1);
 
+        // DEBUG
+        //Debug.Log("Vertice per line: " + verticesPerLine);
+
+        // Initialize a meshData object
         MeshData meshData = new MeshData(verticesPerLine);
 
-        int[,] vertexIndicesMap = new int[borderedSize,borderedSize];
+        // Initialize a 2D array of ints to hold the vertex indices
+        // of both the rendered mesh and the border
+        int[,] vertexIndicesMap = new int[totalSize, totalSize];
+        
+        // Initialize a variable to hold the mesh vertex index
         int meshVertexIndex = 0;
-        int borderVertexIndex = 0;
+        
+        // Initialize a variable to hold the border vertex index
+        // The border will not be rendered, but is used to smooth the seams between chunks
+        int borderVertexIndex = -1;
 
-        for (int y = 0; y < borderedSize; y += meshSimplificationIncrement) {
-            for (int x = 0; x < borderedSize; x += meshSimplificationIncrement) {
-                // This will be true if any of the statements are true
-                bool isBorderVertex = y == 0 || y == borderedSize - 1 || x == 0 || x == borderedSize - 1;
-
-                if (isBorderVertex) {
-                    vertexIndicesMap[x,y] = borderVertexIndex;
-                    // We want border indices to be negative
+        // Iterate over the size of the total size to fill the vertexIndicesMap array
+        // Skip vertices depending on the LOD setting
+        for (int y = 0; y < totalSize; y += lodIncrement) {
+            for (int x = 0; x < totalSize; x += lodIncrement) {
+                // If the vertex is on the border of the map, it is a border vertex
+                if (y == 0 || y == totalSize - 1 || x == 0 || x == totalSize - 1) {
+                    vertexIndicesMap[x, y] = borderVertexIndex;
+                    // Border indices will be negative values starting from -1
                     borderVertexIndex--;
+                // Otherwise, it is rendered mesh vertex
                 } else {
-                    // We will use this 2D map in the next loop
-                    vertexIndicesMap[x,y] = meshVertexIndex;
+                    // These interior indices will be positive values starting from 0
+                    vertexIndicesMap[x, y] = meshVertexIndex;
                     meshVertexIndex++;
                 }
             }
         }
+
+        /* Debug - Good
+        for (int y = 0; y < totalSize; y++) {
+            for (int x = 0; x < totalSize; x++) {
+                Debug.Log("Vertex Map [" + x + ", " + y + "]: " + vertexIndicesMap[x, y]);
+            }
+        } */
+
+        // Used to center the mesh data (subtract 1 because we count from 0)
+        float topLeftX = (meshSize - 1) / -2f;
+        float topLeftZ = (meshSize - 1) / 2f;
+
+        /* Debug - Good
+        Debug.Log("Top Left X: " + topLeftX);
+        Debug.Log("Top Left Z: " + topLeftZ);
+        */
         
-        // Altered source code here to correct mirroring and dimension differences:
-        for (int y = 0; y < borderedSize; y += meshSimplificationIncrement) {
-            for (int x = 0; x < borderedSize; x += meshSimplificationIncrement) {
+        // Iterate over each vertex to build the triangles
+        // Skip vertices depending on the LOD setting
+        for (int y = 0; y < totalSize; y += lodIncrement) {
+            for (int x = 0; x < totalSize; x += lodIncrement) {
+                // Get the vertex index at the current position
                 int vertexIndex = vertexIndicesMap[x,y];
+                
+                // DEBUG
+                // Debug.Log("Vertex Map [" + x + ", " + y + "]: " + "Vertex Index = " + vertexIndex);
 
-                // Each vertex needs a UV map to tell it where each texture should go
-                // By subtracting the x-coordinate, this reverses the UV mapping along the x-axis, which corrects the mirroring issue
-                // Subtract meshSimplificationIncrement to ensure UVs are properly centered
-                Vector2 percent = new Vector2(1f - ((x - meshSimplificationIncrement) / (float) (meshSize - 1)), (y - meshSimplificationIncrement) / (float) (meshSize - 1));
+                // Calculate the relative position of this vertex's x coordinate in the mesh
+                // Subtract lodIncrement to ensure UVs are properly centered
+                float relX = (x - lodIncrement) / (float) (meshSize);
+                // Calculate the relative position of this vertex's y coordinate  in the mesh
+                float relY = (y - lodIncrement) / (float) (meshSize);
 
-                // heightMultiplier adjusts the y axis for proper 3D
+                // Subtract the x-coordinate to reverse the UV mapping along the x-axis, correcting mirroring
+                Vector2 uvCoords = new Vector2(relX, relY);
+
+                // Calculate the height of the vertex, or the y-coordinate
                 // heightMap[(meshSize - 1) - x, y] reverses the order of the heightmap data along the x-axis to allign with the unmirrowed UV map
-                float height = heightCurve.Evaluate(noiseMap[(meshSize - 1) - x, y]) * heightMultiplier;
+                float height = heightCurve.Evaluate(heightMap[x, y]) * heightMultiplier;
 
-                Vector3 vertexPostion = new Vector3((percent.x * meshSizeUnsimplified) - halfWidth, height, halfHeight - (percent.y * meshSizeUnsimplified));
+                // Calculate the position (3D coordinate) of the vertex
+                Vector3 vertexPostion = new Vector3(topLeftX + (uvCoords.x * meshSize) , height, topLeftZ - (uvCoords.y * meshSize));
 
-                meshData.AddVertex(vertexPostion, percent, vertexIndex);
+                /* DEBUG
+                Debug.Log("Vertex Position: " + vertexPostion);*/
 
-                // Ignore right and bottom edges of the map *POSSIBLE BUG?*
-                if ( x < borderedSize - 1 && y < borderedSize - 1) {
-                    int a = vertexIndicesMap[x, y];
-                    int b = vertexIndicesMap[x + meshSimplificationIncrement, y];
-                    int c = vertexIndicesMap[x,y + meshSimplificationIncrement];
-                    int d = vertexIndicesMap[x + meshSimplificationIncrement, y + meshSimplificationIncrement];
-                    meshData.AddTriangle(a,d,c);
-                    meshData.AddTriangle(a,b,c);
+                // Add the vertex to the meshData object
+                meshData.AddVertex(vertexPostion, uvCoords, vertexIndex);
+
+                // Build a triangle using the vertex we just calculated as the base
+                // Cannot run if on the right or bottom edge of the map
+                if (x < totalSize - 1 && y < totalSize - 1) {
+                    // DEBUG
+                    // Debug.Log("Building Triangle for [" + x + ", " + y + "]");
+
+                    // The lod increment is used to determine the size of the triangles
+                    // The larger the triangle, the less detailed the mesh is
+                    int vertexA = vertexIndicesMap[x, y];
+                    int vertexB = vertexIndicesMap[x + lodIncrement, y];
+                    int vertexC = vertexIndicesMap[x, y + lodIncrement];
+                    int vertexD = vertexIndicesMap[x + lodIncrement, y + lodIncrement];
+
+                    /* DEBUG
+                    if (x == 5 && y == 1) {
+                        Debug.Log("Vertex A: " + vertexA);
+                        Debug.Log("Vertex B: " + vertexB);
+                        Debug.Log("Vertex C: " + vertexC);
+                        Debug.Log("Vertex D: " + vertexD);
+                    } */
+
+                    meshData.AddTriangle(vertexA, vertexD, vertexC);
+                    meshData.AddTriangle(vertexD, vertexA, vertexB);
                 }
-                vertexIndex++;
             }
         }
         // Return meshData to allow for multi-threading during world generation
@@ -88,50 +153,75 @@ public static class MeshGenerator {
         Vector3[] borderVertices;
         int[] borderTriangles;
 
-        int TriangleIndex;
         int borderTriangleIndex;
-
         int triangleIndex;
 
         public MeshData(int verticesPerLine) {
-            // Array of vectors to store the vertices
+            // Array to store 3D coordinates of the vertices
             vertices = new Vector3[verticesPerLine * verticesPerLine];
-            // Allows us to add textures to the meshes
+            
+            // Array to store 2D coordinates of the UVs for texture mapping
             UVs = new Vector2[verticesPerLine * verticesPerLine];
-            // Array of coordinates to store the triangles
+            
+            // Array to store the indices of the vertices that make up each triangle
             triangles = new int[(verticesPerLine - 1) * (verticesPerLine - 1) * 6];
 
-            // Initialization border vertices array
+            // DEBUG
+            //Debug.Log("Size of triangles array: " + triangles.Length);
+
+            // Array to store the 3D coordinates of the border vertices
             // Multply to get the side values, add 4 to include the corners
             borderVertices = new Vector3[(verticesPerLine * 4) + 4];
+
+            // Array to store the indices of the vertices that make up each border triangle
+            // Each edge of the border is made up of 6 vertices and there are 4 edges, so multiply by 24
             borderTriangles = new int[24 * verticesPerLine];
         }
 
+        // Adds a vertex to the appropriate array based on the vertex index
         public void AddVertex(Vector3 vertexPosition, Vector2 uv, int vertexIndex) {
             // Check if this is a border index
             if (vertexIndex < 0) {
-                borderVertices[-vertexIndex - 1] = vertexPosition;
+                // Convert the negative index to a positive index and subtract 1 to account for the 0 index
+                // Store the vertex's position in the borderVertices array
+                borderVertices[(-vertexIndex) - 1] = vertexPosition;
 
             // Non-border index
             } else {
+                // Store the vertex's position in the vertices array
                 vertices[vertexIndex] = vertexPosition;
+                // Store the vertex's UV in the UVs array
                 UVs[vertexIndex] = uv;
             }
         }
 
         // Helper method (I thought there was a bug here at one point?)
-        public void AddTriangle(int a, int b, int c) {
-            if (a < 0 || b < 0 || c < 0) {
-                borderTriangles[borderTriangleIndex] = a;
-                borderTriangles[borderTriangleIndex + 1] = b;
-                borderTriangles[borderTriangleIndex + 2] = c;
+        public void AddTriangle(int vertA, int vertB, int vertC) {
+
+            if (vertA < 0 || vertB < 0 || vertC < 0) {
+                // DEBUG
+                //Debug.Log("Adding Border Triangle: " + vertA + ", " + vertB + ", " + vertC);
+
+                // Assign the vertices of the border triangle
+                // Every 3 vertices makes up a triangle
+                borderTriangles[borderTriangleIndex] = vertA;
+                borderTriangles[borderTriangleIndex + 1] = vertB;
+                borderTriangles[borderTriangleIndex + 2] = vertC;
 
                 borderTriangleIndex += 3;
                 
             } else {
-                triangles[triangleIndex] = a;
-                triangles[triangleIndex + 1] = b;
-                triangles[triangleIndex + 2] = c;
+                /* DEBUG
+                Debug.Log("Adding Triangle: " + vertA + ", " + vertB + ", " + vertC);
+                Debug.Log("Triangle Index [" + triangleIndex + "] = " + vertA);
+                Debug.Log("Triangle Index + 1 [" + (triangleIndex + 1) + "] = " + vertB);
+                Debug.Log("Triangle Index + 2 [" + (triangleIndex + 2) + "] = " + vertC); */
+
+
+                // Assign the vertices of a normal triangle
+                triangles[triangleIndex] = vertA;
+                triangles[triangleIndex + 1] = vertB;
+                triangles[triangleIndex + 2] = vertC;
 
                 triangleIndex += 3;
             }

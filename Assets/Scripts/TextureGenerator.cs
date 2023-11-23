@@ -12,20 +12,19 @@ public static class TextureGenerator {
             for (int x = 0; x < size; x++) {
 
             // Get the current height
-            float currentHeight = heightMap[x,y];
+            float currentHeight = heightMap[(size - 1) - x, (size - 1) - y];
             int index = (y * size) + x;
 
             colorMap[index] = Color.Lerp(Color.black, Color.white, currentHeight);
             }
         }
-        
         return OutputTexture(colorMap, size);
     }
 
     public static Texture2D CreateColorMapTexture(float[,] heightMap, TerrainType[] regions) {
-    int size = heightMap.GetLength(0);
+        int size = heightMap.GetLength(0);
 
-   // Create a 1D array of colors
+        // Create a 1D array of colors
         Color[] colorMap = new Color[size * size];
         // For every position in the noise map, assign terrain colors
         for (int y = 0; y < size; y++) {
@@ -36,7 +35,7 @@ public static class TextureGenerator {
                 } */
             
                 // Get the current height
-                float currentHeight = heightMap[x,y];
+                float currentHeight = heightMap[(size - 1) - x, (size - 1) - y];
                 int index = (y * size) + x;
 
                 // Match the current height to a color region

@@ -2,16 +2,17 @@ using System;
 using UnityEngine;
 
 public class MapGenerator : MonoBehaviour {
-    public enum DrawMode {HeightMap, ColorMap}
-    // MeshMap, FalloffMap};
-    public enum ChunkSizeOption {Size128 = 128, Size256 = 256, Size512 = 512};
+    public enum DrawMode {HeightMap, ColorMap, MeshMap};
+    //FalloffMap};
+    // Mesh will be 2 smaller than the maps
+    public enum ChunkSizeOption {Size8 = 10, Size128 = 130, Size256 = 258, Size512 = 514};
     public DrawMode drawMode;
     
     public ChunkSizeOption mapChunkSizeOption  = ChunkSizeOption.Size256;
     private int mapChunkSize;
     
-    //[Range(0,6)]
-    //public int editorLOD;
+    [Range(0,6)]
+    public int editorLOD;
     public float noiseScale;
 
     [Range(0,20)]
@@ -27,8 +28,8 @@ public class MapGenerator : MonoBehaviour {
 
     //public bool useFalloff;
 
-    //public float meshHeightMultiplier;
-    //public AnimationCurve meshHeightCurve;
+    public float meshHeightMultiplier;
+    public AnimationCurve meshHeightCurve;
 
     public bool autoUpdate;
 
@@ -46,7 +47,7 @@ public class MapGenerator : MonoBehaviour {
         MapDisplay display = FindObjectOfType<MapDisplay>();
 
         // Generate the height map data
-        float[,] heightMap = GenerateHeightMap(Vector2.zero);
+        float[,] heightMap = NoiseMap.GenerateNoiseMap(mapChunkSize, seed, noiseScale, octaves, persistance, lacunarity, Vector2.zero + offset);
 
         // Draw and display the height map as a monochrome 2D texture
         if (drawMode == DrawMode.HeightMap)
@@ -57,25 +58,14 @@ public class MapGenerator : MonoBehaviour {
             display.DrawTexture(TextureGenerator.CreateColorMapTexture(heightMap, regions), false);
             
         // Display the height map with meshes and textures
-        //else if (drawMode == DrawMode.MeshMap) 
-            //display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap, meshHeightMultiplier, meshHeightCurve, editorLOD), 
-            //TextureGenerator.TextureFromColorMap(colorMap, mapChunkSize, mapChunkSize));
-
+        else if (drawMode == DrawMode.MeshMap) {
+            display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap, meshHeightMultiplier, meshHeightCurve, editorLOD), 
+            TextureGenerator.CreateColorMapTexture(heightMap, regions));
+        }
         //else if (drawMode == DrawMode.FalloffMap)
             //display.DrawTexture(TextureGenerator.TextureFromHeightMap(FalloffGenerator.GenerateFalloffMap(mapChunkSize)));
     }
-
-    // Generate the height map 
-    float[,] GenerateHeightMap(Vector2 center) {
-        // Generate noise map
-        float[,] heightMap = NoiseMap.GenerateNoiseMap(mapChunkSize, seed, noiseScale, octaves, persistance, lacunarity, center + offset);
-
-        // Debug
-        //DebugMap(heightMap);
-
-        return heightMap;
-    }
-
+    
     void DebugMap(float[,] map) {
         // Overwrite the edges of the map with 0s for comparison with other maps
         // 0 = black, 1 = white
@@ -96,12 +86,14 @@ public class MapGenerator : MonoBehaviour {
         map[1, 0] = 1;
         map[2, 0] = 1;
 
-        map[255, 255] = 0;
-        map[255, 254] = 0;
-        map[255, 253] = 0;
-        map[254, 255] = 0;
-        map[253, 255] = 0;
+        // Mark opposite corner
+        map[mapChunkSize - 1, mapChunkSize - 1] = 0;
+        map[mapChunkSize - 1, mapChunkSize - 2] = 0;
+        map[mapChunkSize - 1, mapChunkSize - 3] = 0;
+        map[mapChunkSize - 2, mapChunkSize - 1] = 0;
+        map[mapChunkSize - 3, mapChunkSize - 1] = 0;
 
+        // Example:
         // [0,255]........[255,255]
         // ....................
         // [0,0]..........[255,0]

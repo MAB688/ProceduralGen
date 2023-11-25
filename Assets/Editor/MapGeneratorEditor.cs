@@ -1,4 +1,3 @@
-using System.Collections;
 using UnityEngine;
 using UnityEditor;
 
@@ -15,5 +14,6 @@ public class MapGeneratorEditor : Editor
 
         if (GUILayout.Button("Generate"))
             mapGen.DrawMapInEditor();
+
     }
 }

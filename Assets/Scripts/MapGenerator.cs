@@ -3,23 +3,23 @@ using UnityEngine;
 
 public class MapGenerator : MonoBehaviour {
     public enum DrawMode {HeightMap, ColorMap, MeshMap};
-    //FalloffMap};
-    // Since height map values are used for vertices in the mesh (not squares)
-    // If we want a x by x mesh grid, we must generate a 
-    // x + 1 by x + 1 height map to pass in since the mesh will be x -1 by x -1
-    // This is because we lose a row and column when converting height map values
-    // Into vertices, we are creating meshes that are x by x vertices which results in
-    // a mesh with x - 1 by x - 1 tiles
-    public enum ChunkSizeOption {Size4 = 5, Size128 = 129, Size256 = 257, Size512 = 513};
-    // 256 is the max size or a 16 bit mesh
-
     public DrawMode drawMode;
+
+    // Height map values are used for vertices in the mesh
+    // We lose a row and column of "squares" when converting height map values into vertices
+    // EX: Size 256 will generate a 256 x 256 height map which 
+    // generates a mesh with 256 x 256 vertices (will appear smaller than height map)
+    // By adding an extra vertice, we retain the same amount of squares in the mesh and make LOD options easier
+    public enum NumVerticeOption {Size128 = 129, Size256 = 257, Size512 = 513, Size1024 = 1025};
+    public NumVerticeOption numberOfVertices = NumVerticeOption.Size256;
+    [HideInInspector]
+    public int numVertices;
     
-    public ChunkSizeOption mapChunkSizeOption  = ChunkSizeOption.Size256;
-    private int mapChunkSize;
-    
-    //[Range(0,6)]
-    //public int editorLOD;
+    // Must be a factor of (numVertices - 1)
+    public enum LODOption {LOD0 = 0, LOD2 = 2, LOD4 = 4, LOD8 = 8};
+    public LODOption lodOption = LODOption.LOD0;
+    private int editorLOD;
+
     public float noiseScale;
 
     [Range(0,20)]
@@ -33,28 +33,21 @@ public class MapGenerator : MonoBehaviour {
     public int seed;
     public Vector2 offset;
 
-    //public bool useFalloff;
-
-    //public float meshHeightMultiplier;
-    //public AnimationCurve meshHeightCurve;
+    public int meshHeightMultiplier;
+    // The curve changes how much each height is affected by the multiplier
+    public AnimationCurve meshHeightCurve;
 
     public bool autoUpdate;
 
     public TerrainType[] regions;
 
-    // Disabled for now
-    //float[,] falloffMap;
-
-    /*Queue<MapThreadInfo<float[,]>> mapDataThreadInfoQueue = new Queue<MapThreadInfo<float[,]>>();
-    Queue<MapThreadInfo<MeshGenerator.MeshData>> meshDataThreadInfoQueue = new Queue<MapThreadInfo<MeshGenerator.MeshData>>();*/
-
-    // Generate the physical maps
+    // Generate the maps
     public void DrawMapInEditor() {
         // Create an instance of the MapDisplay script
         MapDisplay display = FindObjectOfType<MapDisplay>();
 
         // Generate the height map data
-        float[,] heightMap = NoiseMap.GenerateNoiseMap(mapChunkSize, seed, noiseScale, octaves, persistance, lacunarity, Vector2.zero + offset);
+        float[,] heightMap = NoiseMap.GenerateNoiseMap(numVertices, seed, noiseScale, octaves, persistance, lacunarity, Vector2.zero + offset);
 
         // Draw and display the height map as a monochrome 2D texture
         if (drawMode == DrawMode.HeightMap)
@@ -66,53 +59,15 @@ public class MapGenerator : MonoBehaviour {
             
         // Display the height map with meshes and textures
         else if (drawMode == DrawMode.MeshMap) {
-            display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap), TextureGenerator.CreateColorMapTexture(heightMap, regions));
+            display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap, meshHeightMultiplier, meshHeightCurve, editorLOD), TextureGenerator.CreateColorMapTexture(heightMap, regions));
         }
-        //else if (drawMode == DrawMode.FalloffMap)
-            //display.DrawTexture(TextureGenerator.TextureFromHeightMap(FalloffGenerator.GenerateFalloffMap(mapChunkSize)));
-    }
-    
-    void DebugMap(float[,] map) {
-        // Overwrite the edges of the map with 0s for comparison with other maps
-        // 0 = black, 1 = white
-        for (int i = 0; i < mapChunkSize; i++) {
-            // Bottom side [i,0]
-            map[i, 0] = 1;
-            // Top side [i,255]
-            map[i, mapChunkSize - 1] = 0;
-            // Right side [255,i]
-            map[mapChunkSize - 1, i] = 1;
-            // Left side [0,i] 
-            map[0, i] = 0;
-        }   
-        // Mark origin corner
-        map[0, 0] = 1;
-        map[0, 1] = 1;
-        map[0, 2] = 1;
-        map[1, 0] = 1;
-        map[2, 0] = 1;
-
-        // Mark opposite corner
-        map[mapChunkSize - 1, mapChunkSize - 1] = 0;
-        map[mapChunkSize - 1, mapChunkSize - 2] = 0;
-        map[mapChunkSize - 1, mapChunkSize - 3] = 0;
-        map[mapChunkSize - 2, mapChunkSize - 1] = 0;
-        map[mapChunkSize - 3, mapChunkSize - 1] = 0;
-
-        // Example:
-        // [0,255]........[255,255]
-        // ....................
-        // [0,0]..........[255,0]
-    }
-
-    void Awake() {
-        //falloffMap = FalloffGenerator.GenerateFalloffMap(mapChunkSize);
     }
 
     // This function is called automatically whenever one of the scripts variables is changed in the inspector
     void OnValidate()
     {  
-        mapChunkSize = (int)mapChunkSizeOption;
+        numVertices = (int)numberOfVertices;
+        editorLOD = (int)lodOption;
 
         // Maintain correct minimum values for parameters
         if (lacunarity < 1)
@@ -123,66 +78,9 @@ public class MapGenerator : MonoBehaviour {
         if (noiseScale <= 0)
             noiseScale = 0.0001f;
 
-        //falloffMap = FalloffGenerator.GenerateFalloffMap(mapChunkSize);
     }
 
-    void Update() {
-        /*if (mapDataThreadInfoQueue.Count > 0) {
-            for (int i = 0; i < mapDataThreadInfoQueue.Count; i++) {
-                MapThreadInfo<float[,]> threadInfo = mapDataThreadInfoQueue.Dequeue();
-                threadInfo.callback(threadInfo.parameter);
-            }
-        }
-
-        if (meshDataThreadInfoQueue.Count > 0) {
-            for (int i = 0; i < meshDataThreadInfoQueue.Count; i++) {
-                MapThreadInfo<MeshGenerator.MeshData> threadInfo = meshDataThreadInfoQueue.Dequeue();
-                threadInfo.callback(threadInfo.parameter);
-            }
-        } */
-    }
-
-    /*public void RequestMapData(Vector2 center, Action<float[,]> callback) {
-        ThreadStart threadStart = delegate {
-            MapDataThread(center, callback);
-        };
-
-        new Thread(threadStart).Start();
-    }
-
-
-    void MapDataThread(Vector2 center, Action<float[,]> callback) {
-        float[,] mapData = GenerateNoiseMapData(center);
-        lock(mapDataThreadInfoQueue) {
-            mapDataThreadInfoQueue.Enqueue(new MapThreadInfo<float[,]>(callback, mapData));
-        }
-    }
-
-    public void RequestMeshData(float[,] mapData, int lod, Action<MeshGenerator.MeshData> callback) {
-        ThreadStart threadStart = delegate {
-            MeshDataThread(mapData, lod, callback);
-        };
-
-        new Thread(threadStart).Start();
-    }
-
-    void MeshDataThread(float[,] mapData, int lod, Action<MeshGenerator.MeshData> callback) {
-        MeshGenerator.MeshData meshData = MeshGenerator.GenerateTerrainMesh(mapData, meshHeightMultiplier, meshHeightCurve, lod);
-        lock (meshDataThreadInfoQueue) {
-            meshDataThreadInfoQueue.Enqueue(new MapThreadInfo<MeshGenerator.MeshData>(callback, meshData));
-        }
-    } */
-
-    // Generic so it can handle both map data and meshes
-    /*struct MapThreadInfo<T> {
-        public readonly Action<T> callback;
-        public readonly T parameter;
-
-        public MapThreadInfo(Action<T> callback, T parameter) {
-            this.callback = callback;
-            this.parameter = parameter;
-        }
-    }*/
+    //public void RequestMapData()
 }
 
 [System.Serializable]
@@ -190,4 +88,12 @@ public struct TerrainType {
     public string name;
     public float height;
     public Color color;
+}
+
+public struct MapData {
+    public float[,] heightMap;
+
+    public MapData(float[,] heightMap) {
+        this.heightMap = heightMap;
+    }
 }

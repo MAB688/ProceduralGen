@@ -3,45 +3,41 @@ using System.Collections;
 
 public static class MeshGenerator {
     
-    public static MeshData GenerateTerrainMesh(float[,] heightMap) { 
-        int mapSize = heightMap.GetLength(0);
+    public static MeshData GenerateTerrainMesh(float[,] heightMap, int heightMultiplier, AnimationCurve heightCurve, int LOD) {
+		// Total vertices = verticesPerLine x verticesPerLine (0 to verticesPerLine - 1)
+        int verticesPerLine = heightMap.GetLength(0);
 
-		Debug.Log("Map Size = " + mapSize);
-        
-        float topLeftX = (mapSize - 1) / -2f;
-        float topLeftZ = (mapSize - 1) / 2f;
+		// Used to center the vertices around a common point
+        float topLeftX = (verticesPerLine - 1) / -2f;
+        float topLeftZ = (verticesPerLine - 1) / 2f;
 
-        MeshData meshData = new MeshData(mapSize);
+		// Used to skip vertices and simplify mesh
+		int incrementLOD = (LOD == 0) ? 1 : LOD * 2;
+
+		// Subtract 1 because we count from 0
+		int verticesPerLineLOD = ((verticesPerLine - 1) / incrementLOD) + 1;
+
+        // The size of the mesh is the number of vertices per line altered by the LOD
+		MeshData meshData = new MeshData(verticesPerLineLOD);
 
         int vertexIndex = 0;
 
-		for (int y = 0; y < mapSize; y++) {
-			for (int x = 0; x < mapSize; x++) {
-                meshData.vertices[vertexIndex] = new Vector3(topLeftX + x, heightMap[x,y], topLeftZ - y);
-                meshData.uvs[vertexIndex] = new Vector2(1f - (x / (float)mapSize), y / (float)mapSize);
+		// For each value in the height map, create a vertex
+		for (int y = 0; y < verticesPerLine; y += incrementLOD) {
+			for (int x = 0; x < verticesPerLine; x += incrementLOD) {
+				// Collect 3D position of vertices 
+                meshData.vertices[vertexIndex] = new Vector3(topLeftX + x, heightCurve.Evaluate(heightMap [x, (verticesPerLine - 1) - y]) * heightMultiplier, topLeftZ - y);
+                // Calculate UVs for texture mapping
+				meshData.uvs[vertexIndex] = new Vector2(1f - (x / (float)verticesPerLine), y / (float)verticesPerLine);
 
-                if (x < mapSize - 1 && y < mapSize - 1) {
-					meshData.AddTriangle(vertexIndex, vertexIndex + mapSize + 1, vertexIndex + mapSize);
-					meshData.AddTriangle(vertexIndex + mapSize + 1, vertexIndex, vertexIndex + 1);
+				// Build triangles, collection of 3 vertices, to form structure of mesh
+                if (x < verticesPerLine - 1 && y < verticesPerLine - 1) {
+					meshData.AddTriangle(vertexIndex, vertexIndex + verticesPerLineLOD + 1, vertexIndex + verticesPerLineLOD);
+					meshData.AddTriangle(vertexIndex + verticesPerLineLOD + 1, vertexIndex, vertexIndex + 1);
 				}
-
-				/*Debug.Log("Height Map[" + x + ", " + y + "]");
-				Debug.Log("Vertex Index = " + vertexIndex);
-				Debug.Log("Added vertice: " + meshData.vertices[vertexIndex]);
-				Debug.Log("Added UV: " +meshData.uvs[vertexIndex]);*/
-
                 vertexIndex++;
             }
         }
-
-		//Debug.Log("Triangles size = " + (mapSize - 1) * (mapSize - 1) * 6);
-		for (int i = 0; i < ((mapSize - 1) * (mapSize - 1) * 6); i += 3) {
-			//Debug.Log("Triangle " + i);
-			/*Debug.Log(meshData.triangles[i]);
-			Debug.Log(meshData.triangles[i+1]);
-			Debug.Log(meshData.triangles[i+2]); */
-		}
-
         return meshData;
     }
 }
@@ -53,10 +49,10 @@ public class MeshData {
 
 	int triangleIndex;
 
-	public MeshData(int mapSize) {
-		vertices = new Vector3[mapSize * mapSize];
-		uvs = new Vector2[mapSize * mapSize];
-		triangles = new int[(mapSize - 1) * (mapSize - 1) * 6];
+	public MeshData(int verticesPerLine) {
+		vertices = new Vector3[verticesPerLine * verticesPerLine];
+		uvs = new Vector2[verticesPerLine * verticesPerLine];
+		triangles = new int[(verticesPerLine - 1) * (verticesPerLine - 1) * 6];
 	}
 
 	public void AddTriangle(int vertexA, int vertexB, int vertexC) {
@@ -68,6 +64,8 @@ public class MeshData {
 
 	public Mesh CreateMesh() {
 		Mesh mesh = new Mesh();
+		// 16 bit index only allows upto 255 vertices
+		mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
 		mesh.vertices = vertices;
 		mesh.triangles = triangles;
 		mesh.uv = uvs;
@@ -112,10 +110,10 @@ public class MeshData {
 //         int lodMeshSize = totalSize - (2 * lodIncrement);
         
 //         // The LOD setting determines how many vertices there are per line
-//         int verticesPerLine = (lodMeshSize - 1) / (lodIncrement + 1);
+//         int verticesPerLineLOD = (lodMeshSize - 1) / (lodIncrement + 1);
 
 //         // DEBUG
-//         //Debug.Log("Vertice per line: " + verticesPerLine);
+//         //Debug.Log("Vertice per line: " + verticesPerLineLOD);
 
 //         // Initialize a meshData object
 //         MeshData meshData = new MeshData(lodMeshSize);
@@ -238,26 +236,26 @@ public class MeshData {
 //         int borderTriangleIndex;
 //         int triangleIndex;
 
-//         public MeshData(int verticesPerLine) {
+//         public MeshData(int verticesPerLineLOD) {
 //             // Array to store 3D coordinates of the vertices
-//             vertices = new Vector3[verticesPerLine * verticesPerLine];
+//             vertices = new Vector3[verticesPerLineLOD * verticesPerLineLOD];
             
 //             // Array to store 2D coordinates of the UVs for texture mapping
-//             UVs = new Vector2[verticesPerLine * verticesPerLine];
+//             UVs = new Vector2[verticesPerLineLOD * verticesPerLineLOD];
             
 //             // Array to store the indices of the vertices that make up each triangle
-//             triangles = new int[(verticesPerLine - 1) * (verticesPerLine - 1) * 6];
+//             triangles = new int[(verticesPerLineLOD - 1) * (verticesPerLineLOD - 1) * 6];
 
 //             // DEBUG
 //             //Debug.Log("Size of triangles array: " + triangles.Length);
 
 //             // Array to store the 3D coordinates of the border vertices
 //             // Multply to get the side values, add 4 to include the corners
-//             borderVertices = new Vector3[(verticesPerLine * 4) + 4];
+//             borderVertices = new Vector3[(verticesPerLineLOD * 4) + 4];
 
 //             // Array to store the indices of the vertices that make up each border triangle
 //             // Each edge of the border is made up of 6 vertices and there are 4 edges, so multiply by 24
-//             borderTriangles = new int[24 * verticesPerLine];
+//             borderTriangles = new int[24 * verticesPerLineLOD];
 //         }
 
 //         // Adds a vertex to the appropriate array based on the vertex index

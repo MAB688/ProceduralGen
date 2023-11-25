@@ -29,10 +29,6 @@ public static class TextureGenerator {
         // For every position in the noise map, assign terrain colors
         for (int y = 0; y < size; y++) {
             for (int x = 0; x < size; x++) {
-                
-                /* if (useFalloff){
-                    noiseMapData[x,y] = Mathf.Clamp01(noiseMapData[x,y] - falloffMap[x,y]);
-                } */
             
                 // Get the current height
                 float currentHeight = heightMap[(size - 1) - x, (size - 1) - y];

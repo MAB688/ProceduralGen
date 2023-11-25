@@ -4,15 +4,22 @@ using UnityEngine;
 public class MapGenerator : MonoBehaviour {
     public enum DrawMode {HeightMap, ColorMap, MeshMap};
     //FalloffMap};
-    // Mesh will be 2 smaller than the maps
-    public enum ChunkSizeOption {Size8 = 10, Size128 = 130, Size256 = 258, Size512 = 514};
+    // Since height map values are used for vertices in the mesh (not squares)
+    // If we want a x by x mesh grid, we must generate a 
+    // x + 1 by x + 1 height map to pass in since the mesh will be x -1 by x -1
+    // This is because we lose a row and column when converting height map values
+    // Into vertices, we are creating meshes that are x by x vertices which results in
+    // a mesh with x - 1 by x - 1 tiles
+    public enum ChunkSizeOption {Size4 = 5, Size128 = 129, Size256 = 257, Size512 = 513};
+    // 256 is the max size or a 16 bit mesh
+
     public DrawMode drawMode;
     
     public ChunkSizeOption mapChunkSizeOption  = ChunkSizeOption.Size256;
     private int mapChunkSize;
     
-    [Range(0,6)]
-    public int editorLOD;
+    //[Range(0,6)]
+    //public int editorLOD;
     public float noiseScale;
 
     [Range(0,20)]
@@ -28,8 +35,8 @@ public class MapGenerator : MonoBehaviour {
 
     //public bool useFalloff;
 
-    public float meshHeightMultiplier;
-    public AnimationCurve meshHeightCurve;
+    //public float meshHeightMultiplier;
+    //public AnimationCurve meshHeightCurve;
 
     public bool autoUpdate;
 
@@ -59,8 +66,7 @@ public class MapGenerator : MonoBehaviour {
             
         // Display the height map with meshes and textures
         else if (drawMode == DrawMode.MeshMap) {
-            display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap, meshHeightMultiplier, meshHeightCurve, editorLOD), 
-            TextureGenerator.CreateColorMapTexture(heightMap, regions));
+            display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap), TextureGenerator.CreateColorMapTexture(heightMap, regions));
         }
         //else if (drawMode == DrawMode.FalloffMap)
             //display.DrawTexture(TextureGenerator.TextureFromHeightMap(FalloffGenerator.GenerateFalloffMap(mapChunkSize)));

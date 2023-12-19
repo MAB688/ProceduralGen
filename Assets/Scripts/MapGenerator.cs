@@ -8,7 +8,7 @@ public class MapGenerator : MonoBehaviour {
     // Height map values are used for vertices in the mesh
     // We lose a row and column of "squares" when converting height map values into vertices
     // EX: Size 256 will generate a 256 x 256 height map which 
-    // generates a mesh with 256 x 256 vertices (will appear smaller than height map)
+    // generates a mesh with 256 x 256 vertices (mesh will appear smaller than height map)
     // By adding an extra vertice, we retain the same amount of squares in the mesh and make LOD options easier
     public enum NumVerticeOption {Size128 = 129, Size256 = 257, Size512 = 513, Size1024 = 1025};
     public NumVerticeOption numberOfVertices = NumVerticeOption.Size256;
@@ -80,7 +80,11 @@ public class MapGenerator : MonoBehaviour {
 
     }
 
-    //public void RequestMapData()
+    // RequestMapData
+
+    // RequestMeshData
+
+    // Update
 }
 
 [System.Serializable]
@@ -90,10 +94,10 @@ public struct TerrainType {
     public Color color;
 }
 
-public struct MapData {
+/* public struct MapData {
     public float[,] heightMap;
 
     public MapData(float[,] heightMap) {
         this.heightMap = heightMap;
     }
-}
+} */

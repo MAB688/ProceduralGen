@@ -95,22 +95,30 @@ public class EndlessTerrain : MonoBehaviour {
 
             // The chunk is intially not visible
 			SetVisible(false);
-		}
 
+            // Request the map data for the chunk
+            // Use map data to request mesh data
+            // Create mesh
+
+		}
         // If the viwer is close enough, make the chunk visible
 		public void UpdateTerrainChunk() {
 			float viewerDstFromNearestEdge = Mathf.Sqrt(bounds.SqrDistance (viewerPosition));
 			bool visible = viewerDstFromNearestEdge <= maxViewDst;
-			SetVisible (visible);
+			SetVisible(visible);
 		}
 
 		public void SetVisible(bool visible) {
-			meshObject.SetActive (visible);
+			meshObject.SetActive(visible);
 		}
 
 		public bool IsVisible() {
 			return meshObject.activeSelf;
 		}
+
+        // OnMapDataReceived
+
+        // OnMeshDataReceived
 	}
 }
 

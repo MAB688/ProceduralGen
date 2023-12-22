@@ -1,5 +1,8 @@
 using System;
 using UnityEngine;
+using Unity.Jobs;
+using UnityEngine.Jobs;
+using Unity.Collections;
 
 public class MapGenerator : MonoBehaviour {
     public enum DrawMode {HeightMap, ColorMap, MeshMap};
@@ -41,7 +44,7 @@ public class MapGenerator : MonoBehaviour {
 
     public TerrainType[] regions;
 
-    // Generate the maps
+    // Generate sample maps in the editor (not used in infinite generation)
     public void DrawMapInEditor() {
         // Create an instance of the MapDisplay script
         MapDisplay display = FindObjectOfType<MapDisplay>();
@@ -52,12 +55,13 @@ public class MapGenerator : MonoBehaviour {
         // Draw and display the height map as a monochrome 2D texture
         if (drawMode == DrawMode.HeightMap)
            display.DrawTexture(TextureGenerator.CreateHeightMapTexture(heightMap), true);
+           //display.DrawTexture(TextureGenerator.CreateHeightMapTexture(NoiseMap.GenerateNoiseMap(numVertices, seed, noiseScale, octaves, persistance, lacunarity, Vector2.zero + offset)), true);
 
         // Draw and display the height map as a 2D texture with color
         else if (drawMode == DrawMode.ColorMap)
             display.DrawTexture(TextureGenerator.CreateColorMapTexture(heightMap, regions), false);
             
-        // Display the height map with meshes and textures
+        // Display the height map with meshes and textures (Color map not needed)
         else if (drawMode == DrawMode.MeshMap) {
             display.DrawMesh(MeshGenerator.GenerateTerrainMesh(heightMap, meshHeightMultiplier, meshHeightCurve, editorLOD), TextureGenerator.CreateColorMapTexture(heightMap, regions));
         }
@@ -80,11 +84,103 @@ public class MapGenerator : MonoBehaviour {
 
     }
 
-    // RequestMapData
+    public float[,] mapData;
+    public MeshData meshData;
+    JobHandle secondHandle;
 
-    // RequestMeshData
+    public struct MapDataJob : IJob {   
+        public int numVertices;
+        public int seed;
+        public float noiseScale;
+        public int octaves;
+        public float persistance;
+        public float lacunarity;
+        public Vector2 offset;
+        //public float[,] mapData;
 
-    // Update
+        public void Execute() {
+            float[,] mapData = NoiseMap.GenerateNoiseMap(numVertices, 
+            seed, noiseScale, octaves, persistance, lacunarity, offset);
+            
+        }
+    }
+
+    public struct MeshDataJob : IJob {
+        public float[,] mapData;
+        public int meshHeightMultiplier;
+        public AnimationCurve meshHeightCurve;
+        public int editorLOD;
+        public MeshData meshData;
+        
+        public void Execute() {
+            meshData = MeshGenerator.GenerateTerrainMesh(mapData, 
+            meshHeightMultiplier, meshHeightCurve, editorLOD);
+        }
+    }
+
+    public void ScheduleJobs(Action<MeshData> callback) {
+        mapData = new float[numVertices,numVertices];
+        meshData = new MeshData(numVertices);
+
+        MapDataJob mapDataJob = new MapDataJob {
+            numVertices = numVertices,
+            seed = seed,
+            noiseScale = noiseScale,
+            octaves = octaves,
+            persistance = persistance,
+            lacunarity = lacunarity,
+            offset = offset,
+        };
+
+        JobHandle firstHandle = mapDataJob.Schedule();
+
+        MeshDataJob meshDataJob = new MeshDataJob {
+            mapData = mapData,
+            meshHeightMultiplier = meshHeightMultiplier,
+            meshHeightCurve = meshHeightCurve,
+            editorLOD = editorLOD,
+            meshData = meshData
+            
+        };
+
+        secondHandle = meshDataJob.Schedule(firstHandle);
+        secondHandle.Complete();
+        callback?.Invoke(meshData);
+    }
+
+ public static NativeArray<float> Flatten(float[,] array)
+    {
+        int rows = array.GetLength(0);
+        int cols = array.GetLength(1);
+
+        NativeArray<float> result = new NativeArray<float>(rows * cols, Allocator.Persistent);
+
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result[i * cols + j] = array[i, j];
+            }
+        }
+
+        return result;
+    }
+
+ public static float[,] Expand(NativeArray<float> array, int rows, int cols)
+    {
+        if (array.Length != rows * cols) {
+            throw new ArgumentException("The length of the NativeArray must match the product of rows and columns.");
+        }
+
+        float[,] result = new float[rows, cols];
+
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result[i, j] = array[i * cols + j];
+            }
+        }
+
+        return result;
+    }
+
 }
 
 [System.Serializable]
@@ -93,11 +189,3 @@ public struct TerrainType {
     public float height;
     public Color color;
 }
-
-/* public struct MapData {
-    public float[,] heightMap;
-
-    public MapData(float[,] heightMap) {
-        this.heightMap = heightMap;
-    }
-} */

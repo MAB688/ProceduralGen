@@ -3,6 +3,7 @@ using UnityEngine;
 using Unity.Jobs;
 using UnityEngine.Jobs;
 using Unity.Collections;
+using System.Data;
 
 public class MapGenerator : MonoBehaviour {
     public enum DrawMode {HeightMap, ColorMap, MeshMap};
@@ -84,7 +85,7 @@ public class MapGenerator : MonoBehaviour {
 
     }
 
-    public float[,] mapData;
+    NativeArray<float> mapData;
     public MeshData meshData;
     JobHandle secondHandle;
 
@@ -96,30 +97,32 @@ public class MapGenerator : MonoBehaviour {
         public float persistance;
         public float lacunarity;
         public Vector2 offset;
-        //public float[,] mapData;
+        public NativeArray<float> mapData;
 
+        // Allocator?
         public void Execute() {
-            float[,] mapData = NoiseMap.GenerateNoiseMap(numVertices, 
-            seed, noiseScale, octaves, persistance, lacunarity, offset);
+            mapData = new NativeArray<float>((numVertices * numVertices) + 1, Allocator.TempJob);
+            mapData = Flatten(NoiseMap.GenerateNoiseMap(numVertices, 
+            seed, noiseScale, octaves, persistance, lacunarity, offset));
             
         }
     }
 
     public struct MeshDataJob : IJob {
-        public float[,] mapData;
+        public NativeArray<float> mapData;
         public int meshHeightMultiplier;
         public AnimationCurve meshHeightCurve;
         public int editorLOD;
         public MeshData meshData;
         
         public void Execute() {
-            meshData = MeshGenerator.GenerateTerrainMesh(mapData, 
+            meshData = MeshGenerator.GenerateTerrainMesh(Expand(mapData), 
             meshHeightMultiplier, meshHeightCurve, editorLOD);
         }
     }
 
     public void ScheduleJobs(Action<MeshData> callback) {
-        mapData = new float[numVertices,numVertices];
+        mapData = new NativeArray<float>();
         meshData = new MeshData(numVertices);
 
         MapDataJob mapDataJob = new MapDataJob {
@@ -130,7 +133,8 @@ public class MapGenerator : MonoBehaviour {
             persistance = persistance,
             lacunarity = lacunarity,
             offset = offset,
-        };
+            mapData = mapData        
+            };
 
         JobHandle firstHandle = mapDataJob.Schedule();
 
@@ -140,45 +144,48 @@ public class MapGenerator : MonoBehaviour {
             meshHeightCurve = meshHeightCurve,
             editorLOD = editorLOD,
             meshData = meshData
-            
         };
 
+        mapData.Dispose();
         secondHandle = meshDataJob.Schedule(firstHandle);
         secondHandle.Complete();
         callback?.Invoke(meshData);
+        
     }
 
  public static NativeArray<float> Flatten(float[,] array)
     {
+        // Rows = columns
         int rows = array.GetLength(0);
         int cols = array.GetLength(1);
 
-        NativeArray<float> result = new NativeArray<float>(rows * cols, Allocator.Persistent);
+        NativeArray<float> flatArr = new NativeArray<float>((rows * cols) + 1, Allocator.TempJob);
+        flatArr[flatArr.Length - 1] = rows;
 
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                result[i * cols + j] = array[i, j];
+                flatArr[i * cols + j] = array[i, j];
             }
         }
 
-        return result;
+        return flatArr;
     }
 
- public static float[,] Expand(NativeArray<float> array, int rows, int cols)
+ public static float[,] Expand(NativeArray<float> flatArr)
     {
-        if (array.Length != rows * cols) {
-            throw new ArgumentException("The length of the NativeArray must match the product of rows and columns.");
-        }
+        // Rows = columns
+        int rows = (int)flatArr[flatArr.Length - 1];
+        int cols = rows;
 
-        float[,] result = new float[rows, cols];
+        float[,] expandArr = new float[rows, cols];
 
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                result[i, j] = array[i * cols + j];
+                expandArr[i, j] = flatArr[i * cols + j];
             }
         }
 
-        return result;
+        return expandArr;
     }
 
 }

@@ -107,7 +107,7 @@ public class EndlessTerrain : MonoBehaviour {
 			SetVisible(false);
 
             // Request the height map for the chunk
-            mapGenerator.ScheduleJobs(OnCallBack);
+            
 		}
 
         private void OnCallBack(MeshData meshData) {

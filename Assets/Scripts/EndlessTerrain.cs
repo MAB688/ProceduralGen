@@ -1,14 +1,21 @@
+// Bug rendering with LOD 0
+// I think I must be using the wrong "chunk size" somewhere
+// Or check LOD code, or try different LOD values
+
+
 using UnityEngine;
 using System.Collections.Generic;
 public class EndlessTerrain : MonoBehaviour {
 
-	public const float maxViewDst = 450;
+	public static float maxViewDst;
+	const float chunkUpdateThreshold = 25f;
+	const float sqrChunkUpdateThreshold = chunkUpdateThreshold * chunkUpdateThreshold;
+	public LODInfo[] detailLevels;
 	public Transform viewer;
     public Material mapMaterial;
-
     static MapGenerator mapGenerator;
-
 	public static Vector2 viewerPosition;
+	Vector2 viewerPositionOld;
 	int chunkSize;
 	int numChunksVisible;
 
@@ -24,6 +31,9 @@ public class EndlessTerrain : MonoBehaviour {
         // Get the chunk size from the map generator
         mapGenerator = FindObjectOfType<MapGenerator>();
 		chunkSize = mapGenerator.numVertices;
+		 
+		// Calculate the maximum distance that the viewer can see
+		maxViewDst = detailLevels[detailLevels.Length - 1].visibleDstThreshold;
 
         // Calculate the number of chunks that can be visible at once
 		numChunksVisible = Mathf.RoundToInt(maxViewDst / chunkSize);
@@ -32,7 +42,12 @@ public class EndlessTerrain : MonoBehaviour {
     // On every frame this code is executed
 	void Update() {
 		viewerPosition = new Vector2(viewer.position.x, viewer.position.z);
-		UpdateVisibleChunks ();
+		
+		if ((viewerPositionOld - viewerPosition).sqrMagnitude > sqrChunkUpdateThreshold) {
+			viewerPositionOld = viewerPosition;
+			UpdateVisibleChunks();
+		}
+
 	}
 		
 	void UpdateVisibleChunks() {
@@ -67,7 +82,7 @@ public class EndlessTerrain : MonoBehaviour {
                 // If the terrain chunk dictionary does not contain the chunk
                 } else {
                     // Add the chunk to the dictionary, it cannot be in the viewer's range yet
-					terrainChunks.Add(viewedChunk, new TerrainChunk(viewedChunk, chunkSize, transform, mapMaterial));
+					terrainChunks.Add(viewedChunk, new TerrainChunk(viewedChunk, chunkSize, detailLevels, transform, mapMaterial));
 				}
 			}
 		}
@@ -81,9 +96,16 @@ public class EndlessTerrain : MonoBehaviour {
         MeshRenderer meshRenderer;
         MeshFilter meshFilter;
 
+		LODInfo[] detailLevels;
+		LODMesh[] lodMeshes;
+
+		MapData mapData;
+		bool mapDataReceived;
+		int previousLODIndex = -1;
 
         // Constructor
-		public TerrainChunk(Vector2 coord, int size, Transform parent, Material material) {
+		public TerrainChunk(Vector2 coord, int size, LODInfo[] detailLevels, Transform parent, Material material) {
+			this.detailLevels = detailLevels;
 			// Position of the chunk
             position = coord * size;
             // Bounds of the chunk
@@ -91,8 +113,7 @@ public class EndlessTerrain : MonoBehaviour {
             // Position of the chunk in 3D space
 			Vector3 positionV3 = new Vector3(position.x,0,position.y);
 
-            // Create a plane for the chunk
-			// meshObject = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            // Create a meshObject for the chunk
             meshObject = new GameObject("Terrain Chunk");
             meshRenderer = meshObject.AddComponent<MeshRenderer>();
             meshFilter = meshObject.AddComponent<MeshFilter>();
@@ -105,20 +126,57 @@ public class EndlessTerrain : MonoBehaviour {
 
             // The chunk is intially not visible
 			SetVisible(false);
+			
+			lodMeshes = new LODMesh[detailLevels.Length];
+			for (int i = 0; i < detailLevels.Length; i++) {
+				lodMeshes[i] = new LODMesh(detailLevels[i].lod, UpdateTerrainChunk);
+			}
 
-            // Request the height map for the chunk
-            
+            // Request the map data for the chunk
+			mapGenerator.RequestMapData(position, OnMapDataReceived);   
 		}
 
-        private void OnCallBack(MeshData meshData) {
-            meshFilter.mesh = meshData.CreateMesh();
-        }
+		void OnMapDataReceived(MapData mapData) {
+			this.mapData = mapData;
+			mapDataReceived = true;
+			
+			Texture2D texture = TextureGenerator.OutputTexture(mapData.colorMap, mapGenerator.numVertices);
+			// mapData.heightMap.GetLength(0)
+			meshRenderer.material.mainTexture = texture;
+			
+			UpdateTerrainChunk();
+		}
 
         // If the viwer is close enough, make the chunk visible
 		public void UpdateTerrainChunk() {
-			float viewerDstFromNearestEdge = Mathf.Sqrt(bounds.SqrDistance (viewerPosition));
-			bool visible = viewerDstFromNearestEdge <= maxViewDst;
-			SetVisible(visible);
+			if (mapDataReceived) {
+				float viewerDstFromNearestEdge = Mathf.Sqrt (bounds.SqrDistance (viewerPosition));
+				bool visible = viewerDstFromNearestEdge <= maxViewDst;
+
+				if (visible) {
+					int lodIndex = 0;
+
+					for (int i = 0; i < detailLevels.Length - 1; i++) {
+						if (viewerDstFromNearestEdge > detailLevels[i].visibleDstThreshold) {
+							lodIndex = i + 1;
+						} else {
+							break;
+						}
+					}
+
+					if (lodIndex != previousLODIndex) {
+						LODMesh lodMesh = lodMeshes[lodIndex];
+						if (lodMesh.hasMesh) {
+							previousLODIndex = lodIndex;
+							meshFilter.mesh = lodMesh.mesh;
+						} else if (!lodMesh.hasRequestedMesh) {
+							lodMesh.RequestMesh(mapData);
+						}
+					}
+				}
+
+				SetVisible (visible);
+			}
 		}
 
 		public void SetVisible(bool visible) {
@@ -128,5 +186,38 @@ public class EndlessTerrain : MonoBehaviour {
 		public bool IsVisible() {
 			return meshObject.activeSelf;
 		}
+	}
+
+	class LODMesh {
+
+		public Mesh mesh;
+		public bool hasRequestedMesh;
+		public bool hasMesh;
+		int lod;
+		System.Action updateCallback;
+
+		public LODMesh(int lod, System.Action updateCallback) {
+			this.lod = lod;
+			this.updateCallback = updateCallback;
+		}
+
+		void OnMeshDataReceived(MeshData meshData) {
+			mesh = meshData.CreateMesh();
+			hasMesh = true;
+
+			updateCallback();
+		}
+
+		public void RequestMesh(MapData mapData) {
+			hasRequestedMesh = true;
+			mapGenerator.RequestMeshData(mapData, lod, OnMeshDataReceived);
+		}
+
+	}
+
+	[System.Serializable]
+	public struct LODInfo {
+		public int lod;
+		public float visibleDstThreshold;
 	}
 }

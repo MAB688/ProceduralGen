@@ -1,10 +1,7 @@
 using System;
 using UnityEngine;
-using Unity.Jobs;
-using UnityEngine.Jobs;
-using Unity.Collections;
-using System.Data;
-using Unity.VisualScripting;
+using System.Collections.Generic;
+using System.Threading;
 
 public class MapGenerator : MonoBehaviour
 {
@@ -45,7 +42,67 @@ public class MapGenerator : MonoBehaviour
 
     public bool autoUpdate;
 
+    // Changed to static so that it can be accessed from other scripts
     public TerrainType[] regions;
+
+    // Queue of height map data threads and mesh data threads
+    Queue<MapThreadInfo<MapData>> mapDataThreadInfoQueue = new Queue<MapThreadInfo<MapData>>();
+    Queue<MapThreadInfo<MeshData>> meshDataThreadInfoQueue = new Queue<MapThreadInfo<MeshData>>();
+
+    // Generate the map data for infinite terrain
+    public void RequestMapData(Vector2 center, Action<MapData> callback)
+    {
+        ThreadStart threadStart = delegate {
+            MapDataThread(center, callback);
+        };
+
+        new Thread(threadStart).Start();
+    }
+
+    // Thread to generate the height map data
+    void MapDataThread(Vector2 center, Action<MapData> callback)
+    {
+        MapData mapData = new MapData {
+            heightMap = NoiseMap.GenerateNoiseMap(numVertices, seed, noiseScale, octaves, persistance, lacunarity, center + offset),
+        };
+
+        mapData.colorMap = TextureGenerator.CreateColorMap(mapData.heightMap, regions);
+
+        lock (mapDataThreadInfoQueue) {
+            mapDataThreadInfoQueue.Enqueue(new MapThreadInfo<MapData>(callback, mapData));
+        }
+    }
+
+    public void RequestMeshData(MapData mapData, int lod, Action<MeshData> callback) {
+		ThreadStart threadStart = delegate {
+			MeshDataThread(mapData, lod, callback);
+		};
+
+		new Thread (threadStart).Start ();
+	}
+
+	void MeshDataThread(MapData mapData, int lod, Action<MeshData> callback) {
+		MeshData meshData = MeshGenerator.GenerateTerrainMesh(mapData.heightMap, meshHeightMultiplier, meshHeightCurve, lod);
+		lock (meshDataThreadInfoQueue) {
+			meshDataThreadInfoQueue.Enqueue(new MapThreadInfo<MeshData>(callback, meshData));
+		}
+	}
+
+    void Update() {
+        if (mapDataThreadInfoQueue.Count > 0) {
+			for (int i = 0; i < mapDataThreadInfoQueue.Count; i++) {
+				MapThreadInfo<MapData> threadInfo = mapDataThreadInfoQueue.Dequeue();
+				threadInfo.callback(threadInfo.parameter);
+			}
+		}
+
+		if (meshDataThreadInfoQueue.Count > 0) {
+			for (int i = 0; i < meshDataThreadInfoQueue.Count; i++) {
+				MapThreadInfo<MeshData> threadInfo = meshDataThreadInfoQueue.Dequeue();
+				threadInfo.callback(threadInfo.parameter);
+			}
+		}
+    }
 
     // Generate sample maps in the editor (not used in infinite generation)
     public void DrawMapInEditor()
@@ -95,4 +152,28 @@ public struct TerrainType
     public string name;
     public float height;
     public Color color;
+}
+
+struct MapThreadInfo<T>
+{
+    public readonly Action<T> callback;
+    public readonly T parameter;
+
+    public MapThreadInfo(Action<T> callback, T parameter)
+    {
+        this.callback = callback;
+        this.parameter = parameter;
+    }
+
+}
+
+public struct MapData {
+	public float[,] heightMap;
+	public Color[] colorMap;
+
+	public MapData (float[,] heightMap, Color[] colorMap)
+	{
+		this.heightMap = heightMap;
+		this.colorMap = colorMap;
+	}
 }

@@ -58,4 +58,32 @@ public static class TextureGenerator {
         texture.Apply();
         return texture;
     }
+
+    public static Color[] CreateColorMap (float[,] heightMap, TerrainType[] regions) {
+        int size = heightMap.GetLength(0);
+
+        // Create a 1D array of colors
+        Color[] colorMap = new Color[size * size];
+        // For every position in the noise map, assign terrain colors
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+            
+                // Get the current height
+                float currentHeight = heightMap[(size - 1) - x, (size - 1) - y];
+                int index = (y * size) + x;
+
+                // Match the current height to a color region
+                for (int i = 0; i < regions.Length; i++) {
+                    // If the current height is in the regions height range
+                    if (currentHeight >= regions[i].height)
+                        // Assign that region's color for pos [x,y] in the 1D array
+                        colorMap[index] = regions[i].color;
+                    // Exit loop once the correct color is assigned
+                    else
+                        break;
+                    }
+                }
+            }
+        return colorMap;
+    }
 }
